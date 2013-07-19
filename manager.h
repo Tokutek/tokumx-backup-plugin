@@ -42,6 +42,16 @@ namespace mongo {
                 void get(BSONObjBuilder &b) const;
             } _progress;
 
+            struct Error {
+                // errno, but avoid shadowing
+                int eno;
+                string errstring;
+                Error() : eno(0), errstring() {}
+                void parse(int error_number, const char *error_string);
+                bool empty() const { return errstring.empty(); }
+                void get(BSONObjBuilder &b) const;
+            } _error;
+
             static SimpleMutex _currentMutex;
             static Manager *_currentManager;
 

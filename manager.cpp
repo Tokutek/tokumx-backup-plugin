@@ -224,6 +224,40 @@ namespace mongo {
 
         void Manager::error(int error_number, const char *error_string) {
             LOG(0) << "backup error " << error_number << ": " << error_string << endl;
+            _error.parse(error_number, error_string);
+        }
+
+        void Manager::Error::parse(int error_number, const char *error_string) {
+            eno = error_number;
+            errstring = error_string;
+#if 0  // I don't want to try to parse these right now
+            StringData errorString(error_string);
+            if (errorString == "User aborted backup") {
+                cause = error_string;
+            }
+            else if (errorString.startsWith("This backup")) {
+                cause = error_string;
+            }
+            else if (errorString.find(", errno=") != string::npos) {
+                size_t comma = errorString.find(", errno=");
+                cause = errorString.substr(0, comma).toString();
+            }
+            else if (errorString.startsWith("clock_gettime returned an error")) {
+                cause = "clock_gettime returned an error";
+            }
+            else if (errorString.startsWith("mutex_trylock")) {
+                cause = "mutex_trylock";
+            }
+            else {
+                cause = "";
+            }
+#endif
+        }
+
+        void Manager::Error::get(BSONObjBuilder &b) const {
+            b.append("message", errstring);
+            b.append("errno", eno);
+            b.append("strerror", strerror(eno));
         }
 
         bool Manager::start(const string &dest, string &errmsg, BSONObjBuilder &result) {
@@ -236,7 +270,18 @@ namespace mongo {
             int r = tokubackup_create_backup(source_dirs, dest_dirs, dir_count,
                                              c_poll_fun, this,
                                              c_error_fun, this);
-            return r == 0;
+            bool ok = r == 0;
+            if (ok && !_error.empty()) {
+                LOG(0) << "backup succeeded but reported an error" << endl;
+            }
+            else if (!ok && _error.empty()) {
+                LOG(0) << "backup failed but didn't report an error" << endl;
+            }
+
+            if (!ok) {
+                _error.get(result);
+            }
+            return ok;
         }
 
         bool Manager::throttle(long long bps, string &errmsg, BSONObjBuilder &result) {
