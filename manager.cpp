@@ -69,14 +69,19 @@ namespace mongo {
             LOG(1) << "Backup progress " << ss.str() << endl;
             LOG(1) << progress_string << endl;
 
+            _progress.parse(progress, progress_string);
+            return 0;
+        }
+
+        void Manager::Progress::parse(float progress, const char *progress_string) {
             size_t bytesDone;
             int filesDone;
             int consumed;
             const char *p = progress_string;
             int r = sscanf(p, "Backup progress %zu bytes, %d files. %n", &bytesDone, &filesDone, &consumed);
             if (r != 2) {
-                DEV LOG(0) << "1 Unexpected backup poll message: " << progress_string << endl;
-                return 0;
+                DEV LOG(0) << "Unexpected backup poll message: " << progress_string << endl;
+                return;
             }
             p += consumed;
 
@@ -87,8 +92,8 @@ namespace mongo {
                 int filesRemaining;
                 r = sscanf(p, "%d more files known of. Copying file %n", &filesRemaining, &consumed);
                 if (r != 1) {
-                    DEV LOG(0) << "2 Unexpected backup poll message: " << progress_string << endl;
-                    return 0;
+                    DEV LOG(0) << "Unexpected backup poll message: " << progress_string << endl;
+                    return;
                 }
                 p += consumed;
                 while (*p == ' ' || *p == '\t') {
@@ -98,24 +103,30 @@ namespace mongo {
                 StringData currentFile(p);
                 if (currentFile == ".") {
                     // Just noting that we're copying the directory, don't need to save this progress.
-                    return 0;
+                    return;
                 }
 
-                _progress.filesTotal = filesDone + filesRemaining;
-                _progress.currentSource = currentFile.toString();
-                _progress.currentDest = "";
-                _progress.currentDone = 0;
-                _progress.currentTotal = 0;
+                {
+                    SimpleMutex::scoped_lock lk(_mutex);
+                    _progress = progress;
+                    _bytesDone = bytesDone;
+                    _filesDone = filesDone - 1;  // number reported is the current file number, it's not done yet.
+                    _filesTotal = filesDone + filesRemaining;
+                    _currentSource = currentFile.toString();
+                    _currentDest = "";
+                    _currentDone = 0;
+                    _currentTotal = 0;
+                }
             }
-            else {
+            else if (progressString.find("Throttled: copied") != string::npos) {
                 // Example:
-                // Backup progress 442839 bytes, 10 files.  Copying file: 0/32768 bytes done of /data/db/tokumx.rollback to /data/backup/tokumx.rollback.
+                // Backup progress %ld bytes, %ld files.  Throttled: copied %ld/%ld bytes of %s to %s. Sleeping %.2fs for throttling.
                 size_t currentDone;
                 size_t currentTotal;
-                r = sscanf(p, "Copying file: %zu/%zu bytes done of %n", &currentDone, &currentTotal, &consumed);
+                r = sscanf(p, "Throttled: copied %zu/%zu bytes of %n", &currentDone, &currentTotal, &consumed);
                 if (r != 2) {
-                    DEV LOG(0) << "3 Unexpected backup poll message: " << progress_string << endl;
-                    return 0;
+                    DEV LOG(0) << "Unexpected backup poll message: " << progress_string << endl;
+                    return;
                 }
                 p += consumed;
                 while (*p == ' ' || *p == '\t') {
@@ -127,15 +138,88 @@ namespace mongo {
                 StringData currentSource = rest.substr(0, toPos);
                 StringData currentDest = rest.substr(toPos + 4, rest.size() - 5 - toPos);
 
-                _progress.currentDone = currentDone;
-                _progress.currentTotal = currentTotal;
-                _progress.currentSource = currentSource.toString();
-                _progress.currentDest = currentDest.toString();
+                size_t sleeping = rest.find(". Sleeping ");
+                p += sleeping + 11;
+                while (*p == ' ' || *p == '\t') {
+                    ++p;
+                }
+
+                float sleepTime;
+                r = sscanf(p, "%fs for throttling.", &sleepTime);
+                if (r != 1) {
+                    DEV LOG(0) << "Unexpected backup poll message: " << progress_string << endl;
+                    return;
+                }
+
+                // TODO: maybe report this somewhere?
+                (void) sleepTime;
+
+                {
+                    SimpleMutex::scoped_lock lk(_mutex);
+                    _progress = progress;
+                    _bytesDone = bytesDone;
+                    _filesDone = filesDone - 1;  // number reported is the current file number, it's not done yet.
+                    _currentDone = currentDone;
+                    _currentTotal = currentTotal;
+                    _currentSource = currentSource.toString();
+                    _currentDest = currentDest.toString();
+                }
             }
-            _progress.progress = progress;
-            _progress.bytesDone = bytesDone;
-            _progress.filesDone = filesDone - 1;  // number reported is the current file number, it's not done yet.
-            return 0;
+            else {
+                // Example:
+                // Backup progress 442839 bytes, 10 files.  Copying file: 0/32768 bytes done of /data/db/tokumx.rollback to /data/backup/tokumx.rollback.
+                size_t currentDone;
+                size_t currentTotal;
+                r = sscanf(p, "Copying file: %zu/%zu bytes done of %n", &currentDone, &currentTotal, &consumed);
+                if (r != 2) {
+                    DEV LOG(0) << "Unexpected backup poll message: " << progress_string << endl;
+                    return;
+                }
+                p += consumed;
+                while (*p == ' ' || *p == '\t') {
+                    ++p;
+                }
+
+                StringData rest(p);
+                size_t toPos = rest.find(" to ");
+                StringData currentSource = rest.substr(0, toPos);
+                StringData currentDest = rest.substr(toPos + 4, rest.size() - 5 - toPos);
+
+                {
+                    SimpleMutex::scoped_lock lk(_mutex);
+                    _progress = progress;
+                    _bytesDone = bytesDone;
+                    _filesDone = filesDone - 1;  // number reported is the current file number, it's not done yet.
+                    _currentDone = currentDone;
+                    _currentTotal = currentTotal;
+                    _currentSource = currentSource.toString();
+                    _currentDest = currentDest.toString();
+                }
+            }
+        }
+
+        void Manager::Progress::get(BSONObjBuilder &b) const {
+            SimpleMutex::scoped_lock lk(_mutex);
+            b.append("percent", _progress * 100.0);
+            b.append("bytesDone", _bytesDone);
+            {
+                BSONObjBuilder fb(b.subobjStart("files"));
+                fb.append("done", _filesDone);
+                fb.append("total", _filesTotal);
+                fb.doneFast();
+            }
+            if (!_currentSource.empty()) {
+                BSONObjBuilder cb(b.subobjStart("current"));
+                cb.append("source", _currentSource);
+                if (!_currentDest.empty()) {
+                    cb.append("dest", _currentDest);
+                    BSONObjBuilder bb(cb.subobjStart("bytes"));
+                    bb.append("done", _currentDone);
+                    bb.append("total", _currentTotal);
+                    bb.doneFast();
+                }
+                cb.doneFast();
+            }
         }
 
         void Manager::error(int error_number, const char *error_string) {
@@ -163,29 +247,6 @@ namespace mongo {
             DEV LOG(0) << "Throttling backup to " << bps << endl;
             tokubackup_throttle_backup(bps);
             return true;
-        }
-
-        void Manager::Progress::get(BSONObjBuilder &b) const {
-            b.append("percent", progress * 100.0);
-            b.append("bytesDone", bytesDone);
-            {
-                BSONObjBuilder fb(b.subobjStart("files"));
-                fb.append("done", filesDone);
-                fb.append("total", filesTotal);
-                fb.doneFast();
-            }
-            if (!currentSource.empty()) {
-                BSONObjBuilder cb(b.subobjStart("current"));
-                cb.append("source", currentSource);
-                if (!currentDest.empty()) {
-                    cb.append("dest", currentDest);
-                    BSONObjBuilder bb(cb.subobjStart("bytes"));
-                    bb.append("done", currentDone);
-                    bb.append("total", currentTotal);
-                    bb.doneFast();
-                }
-                cb.doneFast();
-            }
         }
 
         bool Manager::status(string &errmsg, BSONObjBuilder &result) {

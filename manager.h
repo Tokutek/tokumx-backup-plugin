@@ -16,25 +16,29 @@ namespace mongo {
     namespace backup {
 
         class Manager : boost::noncopyable {
-            struct Progress {
-                float progress;
-                long long bytesDone;
-                int filesDone;
-                int filesTotal;
-                long long currentDone;
-                long long currentTotal;
-                string currentSource;
-                string currentDest;
+            class Progress {
+                mutable SimpleMutex _mutex;
+                float _progress;
+                long long _bytesDone;
+                int _filesDone;
+                int _filesTotal;
+                long long _currentDone;
+                long long _currentTotal;
+                string _currentSource;
+                string _currentDest;
+              public:
                 Progress() :
-                        progress(0.0),
-                        bytesDone(0),
-                        filesDone(0),
-                        filesTotal(0),
-                        currentDone(0),
-                        currentTotal(0),
-                        currentSource(),
-                        currentDest()
+                        _mutex("backup progress"),
+                        _progress(0.0),
+                        _bytesDone(0),
+                        _filesDone(0),
+                        _filesTotal(0),
+                        _currentDone(0),
+                        _currentTotal(0),
+                        _currentSource(),
+                        _currentDest()
                 {}
+                void parse(float progress, const char *progress_string);
                 void get(BSONObjBuilder &b) const;
             } _progress;
 
