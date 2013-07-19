@@ -69,6 +69,19 @@ namespace mongo {
             }
         };
 
+        class BackupStatusCommand : public BackupCommand {
+          public:
+            BackupStatusCommand() : BackupCommand("backupStatus") {}
+            virtual void help(stringstream &h) const {
+                h << "Report the current status of hot backup." << endl
+                  << "{ backupStatus: <N> }";
+            }
+            virtual bool run(const string &db, BSONObj &cmdObj, int options, string &errmsg, BSONObjBuilder &result, bool fromRepl) {
+                manager.status(result);
+                return true;
+            }
+        };
+
         class BackupInterface : public plugins::CommandLoader {
           protected:
             bool preLoad(string &errmsg, BSONObjBuilder &result) {
@@ -84,6 +97,7 @@ namespace mongo {
                 CommandVector cmds;
                 cmds.push_back(boost::make_shared<BackupStartCommand>());
                 cmds.push_back(boost::make_shared<BackupThrottleCommand>());
+                cmds.push_back(boost::make_shared<BackupStatusCommand>());
                 return cmds;
             }
 
