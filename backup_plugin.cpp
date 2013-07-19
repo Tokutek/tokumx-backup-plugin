@@ -23,9 +23,9 @@ namespace mongo {
         class BackupCommand : public Command {
           public:
             BackupCommand(const char *name) : Command(name) {}
-            virtual LockType locktype() const { return WRITE; }
+            virtual LockType locktype() const { return NONE; }
             virtual bool requiresSync() const { return false; }
-            virtual bool lockGlobally() const { return true; }
+            virtual bool lockGlobally() const { return false; }
             virtual bool needsTxn() const { return false; }
             virtual bool canRunInMultiStmtTxn() const { return true; }
             virtual int txnFlags() const { return noTxnFlags(); }
