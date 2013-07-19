@@ -78,18 +78,18 @@ namespace mongo {
                     return 0;
                 }
 
-                _progress.filesRemaining = filesRemaining;
+                _progress.filesTotal = filesDone + filesRemaining;
                 _progress.currentSource = currentFile.toString();
                 _progress.currentDest = "";
                 _progress.currentDone = 0;
-                _progress.currentRemaining = 0;
+                _progress.currentTotal = 0;
             }
             else {
                 // Example:
                 // Backup progress 442839 bytes, 10 files.  Copying file: 0/32768 bytes done of /data/db/tokumx.rollback to /data/backup/tokumx.rollback.
                 size_t currentDone;
-                size_t currentRemaining;
-                r = sscanf(p, "Copying file: %zu/%zu bytes done of %n", &currentDone, &currentRemaining, &consumed);
+                size_t currentTotal;
+                r = sscanf(p, "Copying file: %zu/%zu bytes done of %n", &currentDone, &currentTotal, &consumed);
                 if (r != 2) {
                     DEV LOG(0) << "3 Unexpected backup poll message: " << progress_string << endl;
                     return 0;
@@ -105,7 +105,7 @@ namespace mongo {
                 StringData currentDest = rest.substr(toPos + 4, rest.size() - 5 - toPos);
 
                 _progress.currentDone = currentDone;
-                _progress.currentRemaining = currentRemaining;
+                _progress.currentTotal = currentTotal;
                 _progress.currentSource = currentSource.toString();
                 _progress.currentDest = currentDest.toString();
             }
@@ -148,7 +148,7 @@ namespace mongo {
             {
                 BSONObjBuilder fb(b.subobjStart("files"));
                 fb.append("done", filesDone);
-                fb.append("remaining", filesRemaining);
+                fb.append("total", filesTotal);
                 fb.doneFast();
             }
             if (!currentSource.empty()) {
@@ -158,7 +158,7 @@ namespace mongo {
                     cb.append("dest", currentDest);
                     BSONObjBuilder bb(cb.subobjStart("bytes"));
                     bb.append("done", currentDone);
-                    bb.append("remaining", currentRemaining);
+                    bb.append("total", currentTotal);
                     bb.doneFast();
                 }
                 cb.doneFast();

@@ -19,18 +19,18 @@ namespace mongo {
                 float progress;
                 long long bytesDone;
                 int filesDone;
-                int filesRemaining;
+                int filesTotal;
                 long long currentDone;
-                long long currentRemaining;
+                long long currentTotal;
                 string currentSource;
                 string currentDest;
                 Progress() :
                         progress(0.0),
                         bytesDone(0),
                         filesDone(0),
-                        filesRemaining(0),
+                        filesTotal(0),
                         currentDone(0),
-                        currentRemaining(0),
+                        currentTotal(0),
                         currentSource(),
                         currentDest()
                 {}
