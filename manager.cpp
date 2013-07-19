@@ -14,6 +14,7 @@
 #include <backup.h>
 
 #include "mongo/db/jsobj.h"
+#include "mongo/util/concurrency/mutex.h"
 #include "mongo/util/debug_util.h"
 #include "mongo/util/log.h"
 
@@ -24,7 +25,8 @@ namespace mongo {
 
     namespace backup {
 
-        Manager manager;
+        SimpleMutex Manager::_currentMutex("backup manager");
+        Manager *Manager::_currentManager = NULL;
 
         static int c_poll_fun(float progress, const char *progress_string, void *poll_extra) {
             Manager *t = static_cast<Manager *>(poll_extra);
@@ -35,15 +37,36 @@ namespace mongo {
             t->error(error_number, error_string);
         }
 
+        Manager::~Manager() {
+            SimpleMutex::scoped_lock lk(_currentMutex);
+            if (_currentManager == this) {
+                _currentManager = NULL;
+            }
+        }
+
         int Manager::poll(float progress, const char *progress_string) {
+            if (strncmp(progress_string, "Preparing backup", sizeof("Preparing backup")) == 0) {
+                // We won the race (if any), we're the current backup.
+                SimpleMutex::scoped_lock lk(_currentMutex);
+                if (_currentManager != NULL) {
+                    // There's a small possible race condition here.  It's possible that the last
+                    // backup has ended and released its internal lock, but has not yet reached the
+                    // manager's destructor so it is still the value of _currentManager when we
+                    // reach this point.  If that's the case, we don't want to crash so we won't
+                    // assert here.
+                    //verify(_currentManager == NULL);
+
+                    LOG(1) << "A different manager already exists, and we are being polled.  This "
+                           << "should only happen if backups are being done in quick succession." << endl;
+                }
+                _currentManager = this;
+                return 0;
+            }
+
             double percentDone = progress * 100.0;
             stringstream ss;
             ss << std::setw(6) << std::fixed << std::setprecision(2) << percentDone << "%";
             LOG(1) << "Backup progress " << ss.str() << endl;
-
-            if (strncmp(progress_string, "Preparing backup", sizeof("Preparing backup")) == 0) {
-                return 0;
-            }
             LOG(1) << progress_string << endl;
 
             size_t bytesDone;
@@ -165,8 +188,14 @@ namespace mongo {
             }
         }
 
-        void Manager::status(BSONObjBuilder &result) const {
-            _progress.get(result);
+        bool Manager::status(string &errmsg, BSONObjBuilder &result) {
+            SimpleMutex::scoped_lock lk(_currentMutex);
+            if (_currentManager == NULL) {
+                errmsg = "no backup running";
+                return false;
+            }
+            _currentManager->_progress.get(result);
+            return true;
         }
 
     } // namespace backup

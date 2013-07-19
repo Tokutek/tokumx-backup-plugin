@@ -47,6 +47,7 @@ namespace mongo {
                     errmsg = "invalid destination directory: '" + dest + "'";
                     return false;
                 }
+                Manager manager;
                 return manager.start(dest, errmsg, result);
             }
         };
@@ -65,7 +66,7 @@ namespace mongo {
                     return false;
                 }
                 long long bps = e.safeNumberLong();
-                return manager.throttle(bps, errmsg, result);
+                return Manager::throttle(bps, errmsg, result);
             }
         };
 
@@ -77,8 +78,7 @@ namespace mongo {
                   << "{ backupStatus: <N> }";
             }
             virtual bool run(const string &db, BSONObj &cmdObj, int options, string &errmsg, BSONObjBuilder &result, bool fromRepl) {
-                manager.status(result);
-                return true;
+                return Manager::status(errmsg, result);
             }
         };
 

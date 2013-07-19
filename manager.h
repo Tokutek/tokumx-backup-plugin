@@ -9,6 +9,7 @@
 #include "mongo/pch.h"
 
 #include "mongo/db/jsobj.h"
+#include "mongo/util/concurrency/mutex.h"
 
 namespace mongo {
 
@@ -37,19 +38,22 @@ namespace mongo {
                 void get(BSONObjBuilder &b) const;
             } _progress;
 
+            static SimpleMutex _currentMutex;
+            static Manager *_currentManager;
+
           public:
+            ~Manager();
+
             int poll(float progress, const char *progress_string);
 
             void error(int error_number, const char *error_string);
 
             bool start(const string &dest, string &errmsg, BSONObjBuilder &result);
 
-            bool throttle(long long bps, string &errmsg, BSONObjBuilder &result);
+            static bool throttle(long long bps, string &errmsg, BSONObjBuilder &result);
 
-            void status(BSONObjBuilder &b) const;
+            static bool status(string &errmsg, BSONObjBuilder &result);
         };
-
-        extern Manager manager;
 
     } // namespace backup
 
