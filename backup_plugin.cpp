@@ -12,6 +12,7 @@
 
 #include "manager.h"
 
+#include "mongo/db/client.h"
 #include "mongo/db/commands.h"
 #include "mongo/db/jsobj.h"
 #include "mongo/plugins/command_loader.h"
@@ -47,7 +48,7 @@ namespace mongo {
                     errmsg = "invalid destination directory: '" + dest + "'";
                     return false;
                 }
-                Manager manager;
+                Manager manager(cc());
                 return manager.start(dest, errmsg, result);
             }
         };

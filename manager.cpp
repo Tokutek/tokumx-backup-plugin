@@ -13,6 +13,8 @@
 
 #include <backup.h>
 
+#include "mongo/db/client.h"
+#include "mongo/db/curop.h"
 #include "mongo/db/jsobj.h"
 #include "mongo/util/concurrency/mutex.h"
 #include "mongo/util/debug_util.h"
@@ -45,6 +47,11 @@ namespace mongo {
         }
 
         int Manager::poll(float progress, const char *progress_string) {
+            _killedString = killCurrentOp.checkForInterruptNoAssert(_c);
+            if (!_killedString.empty()) {
+                return -1;
+            }
+
             if (strncmp(progress_string, "Preparing backup", sizeof("Preparing backup")) == 0) {
                 // We won the race (if any), we're the current backup.
                 SimpleMutex::scoped_lock lk(_currentMutex);
@@ -280,6 +287,10 @@ namespace mongo {
 
             if (!ok) {
                 _error.get(result);
+            }
+
+            if (!_killedString.empty()) {
+                result.append("reason", _killedString);
             }
             return ok;
         }

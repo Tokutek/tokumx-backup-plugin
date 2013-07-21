@@ -8,6 +8,7 @@
 
 #include "mongo/pch.h"
 
+#include "mongo/db/client.h"
 #include "mongo/db/jsobj.h"
 #include "mongo/util/concurrency/mutex.h"
 
@@ -16,6 +17,9 @@ namespace mongo {
     namespace backup {
 
         class Manager : boost::noncopyable {
+            Client &_c;
+            string _killedString;
+
             class Progress {
                 mutable SimpleMutex _mutex;
                 float _progress;
@@ -56,6 +60,7 @@ namespace mongo {
             static Manager *_currentManager;
 
           public:
+            explicit Manager(Client &c) : _c(c), _killedString(), _progress(), _error() {}
             ~Manager();
 
             int poll(float progress, const char *progress_string);
