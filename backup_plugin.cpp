@@ -121,7 +121,7 @@ namespace mongo {
 extern "C" {
 
     __attribute__((visibility("default")))
-    mongo::plugins::PluginInterface *getInterface(void) {
+    mongo::plugins::PluginInterface *TokuMX_Plugin__getInterface(void) {
         return &mongo::backup::backupInterface;
     }
 
