@@ -12,6 +12,8 @@
 
 #include "manager.h"
 
+#include "mongo/base/status.h"
+#include "mongo/base/units.h"
 #include "mongo/db/client.h"
 #include "mongo/db/commands.h"
 #include "mongo/db/jsobj.h"
@@ -58,15 +60,28 @@ namespace mongo {
             BackupThrottleCommand() : BackupCommand("backupThrottle") {}
             virtual void help(stringstream &h) const {
                 h << "Throttles hot backup to consume only N bytes/sec of I/O." << endl
-                  << "{ backupThrottle: <N> }";
+                  << "{ backupThrottle: <N> }" << endl
+                  << "N can be an integer or a string with a \"k/m/g\" suffix";
             }
             virtual bool run(const string &db, BSONObj &cmdObj, int options, string &errmsg, BSONObjBuilder &result, bool fromRepl) {
                 BSONElement e = cmdObj.firstElement();
-                if (!e.isNumber()) {
-                    errmsg = "backupThrottle argument must be a number";
-                    return false;
+                long long bps;
+                if (e.type() == String) {
+                    Status status = BytesQuantity<long long>::fromString(e.Stringdata(), bps);
+                    if (!status.isOK()) {
+                        stringstream ss;
+                        ss << "error parsing number " << e.Stringdata() << ": " << status.codeString() << " " << status.reason();
+                        errmsg = ss.str();
+                        return false;
+                    }
                 }
-                long long bps = e.safeNumberLong();
+                else {
+                    if (!e.isNumber()) {
+                        errmsg = "backupThrottle argument must be a number";
+                        return false;
+                    }
+                    bps = e.safeNumberLong();
+                }
                 return Manager::throttle(bps, errmsg, result);
             }
         };
