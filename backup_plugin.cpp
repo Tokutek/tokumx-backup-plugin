@@ -14,6 +14,10 @@
 
 #include "mongo/base/status.h"
 #include "mongo/base/units.h"
+#include "mongo/db/auth/action_set.h"
+#include "mongo/db/auth/action_type.h"
+#include "mongo/db/auth/authorization_manager.h"
+#include "mongo/db/auth/privilege.h"
 #include "mongo/db/client.h"
 #include "mongo/db/commands.h"
 #include "mongo/db/jsobj.h"
@@ -39,6 +43,13 @@ namespace mongo {
         class BackupStartCommand : public BackupCommand {
           public:
             BackupStartCommand() : BackupCommand("backupStart") {}
+            virtual void addRequiredPrivileges(const std::string& dbname,
+                                               const BSONObj& cmdObj,
+                                               std::vector<Privilege>* out) {
+                ActionSet actions;
+                actions.addAction(ActionType::backupStart);
+                out->push_back(Privilege(AuthorizationManager::SERVER_RESOURCE_NAME, actions));
+            }
             virtual void help(stringstream &h) const {
                 h << "Starts a hot backup." << endl
                   << "{ backupStart: <destination directory> }";
@@ -58,6 +69,13 @@ namespace mongo {
         class BackupThrottleCommand : public BackupCommand {
           public:
             BackupThrottleCommand() : BackupCommand("backupThrottle") {}
+            virtual void addRequiredPrivileges(const std::string& dbname,
+                                               const BSONObj& cmdObj,
+                                               std::vector<Privilege>* out) {
+                ActionSet actions;
+                actions.addAction(ActionType::backupThrottle);
+                out->push_back(Privilege(AuthorizationManager::SERVER_RESOURCE_NAME, actions));
+            }
             virtual void help(stringstream &h) const {
                 h << "Throttles hot backup to consume only N bytes/sec of I/O." << endl
                   << "{ backupThrottle: <N> }" << endl
@@ -89,6 +107,13 @@ namespace mongo {
         class BackupStatusCommand : public BackupCommand {
           public:
             BackupStatusCommand() : BackupCommand("backupStatus") {}
+            virtual void addRequiredPrivileges(const std::string& dbname,
+                                               const BSONObj& cmdObj,
+                                               std::vector<Privilege>* out) {
+                ActionSet actions;
+                actions.addAction(ActionType::backupStatus);
+                out->push_back(Privilege(AuthorizationManager::SERVER_RESOURCE_NAME, actions));
+            }
             virtual void help(stringstream &h) const {
                 h << "Report the current status of hot backup." << endl
                   << "{ backupStatus: <N> }";
