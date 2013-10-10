@@ -14,8 +14,8 @@
 #include <backup.h>
 
 #include "mongo/db/client.h"
-#include "mongo/db/curop.h"
 #include "mongo/db/jsobj.h"
+#include "mongo/db/kill_current_op.h"
 #include "mongo/util/concurrency/mutex.h"
 #include "mongo/util/debug_util.h"
 #include "mongo/util/log.h"
