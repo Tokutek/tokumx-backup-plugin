@@ -270,14 +270,14 @@ namespace mongo {
         }
 
         bool Manager::_multipleDirsNeeded() {
-	  // TODO: Use realpath on both strings to make sure the
-	  // sub-path check works.
-	  const int subpath = !(cmd.logDir.compare(0, dbpath.length, dbpath));
-	  if (subpath || cmd.logDir == "" || cmd.logDir == dbpath) {
-	    return false;
-	  }
+	    // TODO: Use realpath on both strings to make sure the
+	    // sub-path check works.
+            const int subpath = !(cmdLine.logDir.compare(0, dbpath.size(), dbpath));
+            if (subpath || cmdLine.logDir == "" || cmdLine.logDir == dbpath) {
+                return false;
+            }
 	  
-	  return true;
+            return true;
         }
 
         bool Manager::start(const string &dest, string &errmsg, BSONObjBuilder &result) {
@@ -290,35 +290,35 @@ namespace mongo {
 	    // If the user has set a separate log directory, we should
 	    // back that as well.
 	    if (_multipleDirsNeeded()) {
-	      source_dirs[1] = cmdLine.logDir.c_str();
+                source_dirs[1] = cmdLine.logDir.c_str();
 
-	      // Create two directories underneath the given
-	      // destination directory, one for the data directory,
-	      // the other for the log directory.
-	      _data_suffix = "/data";
-	      _log_suffix = "/log";
-	      _data_dest = dest + _data_suffix;
-	      _log_dest = dest + _log_suffix;
+                // Create two directories underneath the given
+                // destination directory, one for the data directory,
+                // the other for the log directory.
+                _data_suffix = "/data";
+                _log_suffix = "/log";
+                _data_dest = dest + _data_suffix;
+                _log_dest = dest + _log_suffix;
+                
+                // NOTE: This is not portable, we could use boost instead...
+                int r = 0;
+                r = mkdir(_data_dest.c_str(), S_IWOTH | S_IROTH);
+                if (r != 0) {
+                    LOG(0) << "Could not create destination data directory for backup." << endl;
+                    return false;
+                }
 
-	      // NOTE: This is not portable, we could use boost instead...
-	      int r = 0;
-	      r = mkdir(_data_dest.c_str());
-	      if (r != 0) {
-		LOG(0) << "Could not create destination data directory for backup." << endl;
-		return false;
-	      }
+                r = mkdir(_log_dest.c_str(), S_IWOTH | S_IROTH);
+                if (r != 0) {
+                    LOG(0) << "Could not create destination log directory for backup." << endl;
+                    return false;
+                }
 
-	      r = mkdir(_log_dest.c_str());
-	      if (r != 0) {
-		LOG(0) << "Could not create destination log directory for backup." << endl;
-		return false;
-	      }
-
-	      // We have to set BOTH destination directories to the
-	      // newly created directories.
-	      dest_dirs[0] = _data_dest.c_str();
-	      dest_dirs[1] = _log_dest.c_str();
-	      dir_count = 2;
+                // We have to set BOTH destination directories to the
+                // newly created directories.
+                dest_dirs[0] = _data_dest.c_str();
+                dest_dirs[1] = _log_dest.c_str();
+                dir_count = 2;
 	    }
 
             DEV LOG(0) << "Starting backup on " << dest << endl;
