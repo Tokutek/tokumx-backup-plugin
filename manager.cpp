@@ -10,6 +10,8 @@
 
 #include <iomanip>
 #include <string>
+#include <sys/stat.h>
+#include <sys/types.h>
 
 #include <backup.h>
 
@@ -267,12 +269,58 @@ namespace mongo {
             b.append("strerror", strerror(eno));
         }
 
+        bool Manager::_multipleDirsNeeded() {
+	  // TODO: Use realpath on both strings to make sure the
+	  // sub-path check works.
+	  const int subpath = !(cmd.logDir.compare(0, dbpath.length, dbpath));
+	  if (subpath || cmd.logDir == "" || cmd.logDir == dbpath) {
+	    return false;
+	  }
+	  
+	  return true;
+        }
+
         bool Manager::start(const string &dest, string &errmsg, BSONObjBuilder &result) {
-            const char *source_dirs[1];
-            const char *dest_dirs[1];
-            const int dir_count = 1;
-            source_dirs[0] = dbpath.c_str();
-            dest_dirs[0] = dest.c_str();
+            const char *source_dirs[2];
+            const char *dest_dirs[2];
+            int dir_count = 1;
+	    source_dirs[0] = dbpath.c_str();
+	    dest_dirs[0] = dest.c_str();
+
+	    // If the user has set a separate log directory, we should
+	    // back that as well.
+	    if (_multipleDirsNeeded()) {
+	      source_dirs[1] = cmdLine.logDir.c_str();
+
+	      // Create two directories underneath the given
+	      // destination directory, one for the data directory,
+	      // the other for the log directory.
+	      _data_suffix = "/data";
+	      _log_suffix = "/log";
+	      _data_dest = dest + _data_suffix;
+	      _log_dest = dest + _log_suffix;
+
+	      // NOTE: This is not portable, we could use boost instead...
+	      int r = 0;
+	      r = mkdir(_data_dest.c_str());
+	      if (r != 0) {
+		LOG(0) << "Could not create destination data directory for backup." << endl;
+		return false;
+	      }
+
+	      r = mkdir(_log_dest.c_str());
+	      if (r != 0) {
+		LOG(0) << "Could not create destination log directory for backup." << endl;
+		return false;
+	      }
+
+	      // We have to set BOTH destination directories to the
+	      // newly created directories.
+	      dest_dirs[0] = _data_dest.c_str();
+	      dest_dirs[1] = _log_dest.c_str();
+	      dir_count = 2;
+	    }
+
             DEV LOG(0) << "Starting backup on " << dest << endl;
             int r = tokubackup_create_backup(source_dirs, dest_dirs, dir_count,
                                              c_poll_fun, this,

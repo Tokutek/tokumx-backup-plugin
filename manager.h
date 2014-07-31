@@ -59,6 +59,13 @@ namespace mongo {
             static SimpleMutex _currentMutex;
             static Manager *_currentManager;
 
+	    string _data_suffix;
+	    string _log_suffix;
+	    string _data_dest;
+	    string _log_dest;
+
+	    bool _multipleDirsNeeded();
+
           public:
             explicit Manager(Client &c) : _c(c), _killedString(), _progress(), _error() {}
             ~Manager();
