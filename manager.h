@@ -1,3 +1,5 @@
+/* -*- mode: C++; c-basic-offset: 4; indent-tabs-mode: nil -*- */
+// vim: ft=cpp:expandtab:ts=8:sw=4:softtabstop=4:
 // @file manager.h
 
 /**
@@ -59,12 +61,7 @@ namespace mongo {
             static SimpleMutex _currentMutex;
             static Manager *_currentManager;
 
-	    string _data_suffix;
-	    string _log_suffix;
-	    string _data_dest;
-	    string _log_dest;
-
-	    bool _multipleDirsNeeded();
+            bool _multipleDirsNeeded();
 
           public:
             explicit Manager(Client &c) : _c(c), _killedString(), _progress(), _error() {}

@@ -1,5 +1,6 @@
+/* -*- mode: C++; c-basic-offset: 4; indent-tabs-mode: nil -*- */
+// vim: ft=cpp:expandtab:ts=8:sw=4:softtabstop=4:
 // @file manager.cpp
-
 /**
 *    Copyright (C) 2013 Tokutek Inc.
 */
@@ -281,43 +282,58 @@ namespace mongo {
         }
 
         bool Manager::start(const string &dest, string &errmsg, BSONObjBuilder &result) {
+            const std::string data_suffix = "/data";
+            const std::string log_suffix = "/log";
+            std::string data_dest;
+            std::string log_dest;
             const char *source_dirs[2];
             const char *dest_dirs[2];
             int dir_count = 1;
-	    source_dirs[0] = dbpath.c_str();
-	    dest_dirs[0] = dest.c_str();
 
+            source_dirs[0] = dbpath.c_str();
+            dest_dirs[0] = dest.c_str();
+            
 	    // If the user has set a separate log directory, we should
-	    // back that as well.
+	    // back that up as well.
 	    if (_multipleDirsNeeded()) {
                 source_dirs[1] = cmdLine.logDir.c_str();
 
                 // Create two directories underneath the given
                 // destination directory, one for the data directory,
                 // the other for the log directory.
-                _data_suffix = "/data";
-                _log_suffix = "/log";
-                _data_dest = dest + _data_suffix;
-                _log_dest = dest + _log_suffix;
-                
+                data_dest = dest + data_suffix;
+                log_dest = dest + log_suffix;
+
                 // NOTE: This is not portable, we could use boost instead...
+                // Need try catch block here?
+                /******
+                bool result = true;
+                boost::filesystem::path data_path(data_dest);
+                result = boost::filesystem::create_directory(data_path);
+                boost::filesystem::path log_path(log_dest);
+                result = boost::filesystem::create_directory(log_path);
+                ******/
                 int r = 0;
-                r = mkdir(_data_dest.c_str(), S_IWOTH | S_IROTH);
+                r = mkdir(data_dest.c_str(), S_IWOTH | S_IROTH);
                 if (r != 0) {
-                    LOG(0) << "Could not create destination data directory for backup." << endl;
+                    r = errno;
+                    _error.parse(r, "Couldn't create backup data directory");
+                    _error.get(result);
                     return false;
                 }
 
-                r = mkdir(_log_dest.c_str(), S_IWOTH | S_IROTH);
+                r = mkdir(log_dest.c_str(), S_IWOTH | S_IROTH);
                 if (r != 0) {
-                    LOG(0) << "Could not create destination log directory for backup." << endl;
+                    r = errno;
+                    _error.parse(r, "Couldn't create backup log directory");
+                    _error.get(result);
                     return false;
                 }
 
                 // We have to set BOTH destination directories to the
                 // newly created directories.
-                dest_dirs[0] = _data_dest.c_str();
-                dest_dirs[1] = _log_dest.c_str();
+                dest_dirs[0] = data_dest.c_str();
+                dest_dirs[1] = log_dest.c_str();
                 dir_count = 2;
 	    }
 
@@ -332,7 +348,7 @@ namespace mongo {
             else if (!ok && _error.empty()) {
                 LOG(0) << "backup failed but didn't report an error" << endl;
             }
-
+            
             if (!ok) {
                 _error.get(result);
             }
@@ -340,6 +356,7 @@ namespace mongo {
             if (!_killedString.empty()) {
                 result.append("reason", _killedString);
             }
+
             return ok;
         }
 
