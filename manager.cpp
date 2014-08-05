@@ -284,16 +284,15 @@ namespace mongo {
         }
 
         bool Manager::start(const string &dest, string &errmsg, BSONObjBuilder &result) {
-            const std::string data_suffix = "/data";
-            const std::string log_suffix = "/log";
-            stringstream data_dest;
-            stringstream log_dest;
+            //            const std::string data_suffix = "/data";
+            //const std::string log_suffix = "/log";
+            boost::filesystem::path data_dest = dest;
+            boost::filesystem::path log_dest = dest;
             const char *source_dirs[2];
             const char *dest_dirs[2];
             int dir_count = 1;
 
             source_dirs[0] = dbpath.c_str();
-            dest_dirs[0] = dest.c_str();
             
 	    // If the user has set a separate log directory, we should
 	    // back that up as well.
@@ -303,14 +302,12 @@ namespace mongo {
                 // Create two directories underneath the given
                 // destination directory, one for the data directory,
                 // the other for the log directory.
-                data_dest << dest << data_suffix;
-                log_dest << dest << log_suffix;
+                data_dest = data_dest / "data";
+                log_dest = log_dest / "log";
                 bool success = false;
                 try {
-                    boost::filesystem::path data_path(data_dest.str());
-                    success = boost::filesystem::create_directory(data_path);
-                    boost::filesystem::path log_path(log_dest.str());
-                    success = boost::filesystem::create_directory(log_path);
+                    success = boost::filesystem::create_directory(data_dest);
+                    success = boost::filesystem::create_directory(log_dest);
                 } catch (...) {
                     // NOTE: No errno here.
                     _error.parse(success, "Couldn't create backup subdirectories");
@@ -320,10 +317,13 @@ namespace mongo {
 
                 // We have to set BOTH destination directories to the
                 // newly created directories.
-                dest_dirs[0] = data_dest.str().c_str();
-                dest_dirs[1] = log_dest.str().c_str();
+                dest_dirs[0] = data_dest.generic_string().c_str();
+                dest_dirs[1] = log_dest.generic_string().c_str();
                 dir_count = 2;
-	    }
+	    } else {
+                dest_dirs[0] = dest.c_str();
+            }
+
 
             DEV LOG(0) << "Starting backup on " << dest << endl;
             int r = tokubackup_create_backup(source_dirs, dest_dirs, dir_count,
