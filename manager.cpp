@@ -284,14 +284,11 @@ namespace mongo {
         }
 
         bool Manager::start(const string &dest, string &errmsg, BSONObjBuilder &result) {
-            //            const std::string data_suffix = "/data";
-            //const std::string log_suffix = "/log";
             boost::filesystem::path data_dest = dest;
             boost::filesystem::path log_dest = dest;
             const char *source_dirs[2];
             const char *dest_dirs[2];
             int dir_count = 1;
-
             source_dirs[0] = dbpath.c_str();
             
 	    // If the user has set a separate log directory, we should
