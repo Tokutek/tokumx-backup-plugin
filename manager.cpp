@@ -14,6 +14,8 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 
+#include <boost/filesystem.hpp>
+
 #include <backup.h>
 
 #include "mongo/db/client.h"
@@ -284,8 +286,8 @@ namespace mongo {
         bool Manager::start(const string &dest, string &errmsg, BSONObjBuilder &result) {
             const std::string data_suffix = "/data";
             const std::string log_suffix = "/log";
-            std::string data_dest;
-            std::string log_dest;
+            stringstream data_dest;
+            stringstream log_dest;
             const char *source_dirs[2];
             const char *dest_dirs[2];
             int dir_count = 1;
@@ -301,39 +303,25 @@ namespace mongo {
                 // Create two directories underneath the given
                 // destination directory, one for the data directory,
                 // the other for the log directory.
-                data_dest = dest + data_suffix;
-                log_dest = dest + log_suffix;
-
-                // NOTE: This is not portable, we could use boost instead...
-                // Need try catch block here?
-                /******
-                bool result = true;
-                boost::filesystem::path data_path(data_dest);
-                result = boost::filesystem::create_directory(data_path);
-                boost::filesystem::path log_path(log_dest);
-                result = boost::filesystem::create_directory(log_path);
-                ******/
-                int r = 0;
-                r = mkdir(data_dest.c_str(), S_IWOTH | S_IROTH);
-                if (r != 0) {
-                    r = errno;
-                    _error.parse(r, "Couldn't create backup data directory");
-                    _error.get(result);
-                    return false;
-                }
-
-                r = mkdir(log_dest.c_str(), S_IWOTH | S_IROTH);
-                if (r != 0) {
-                    r = errno;
-                    _error.parse(r, "Couldn't create backup log directory");
+                data_dest << dest << data_suffix;
+                log_dest << dest << log_suffix;
+                bool success = false;
+                try {
+                    boost::filesystem::path data_path(data_dest.str());
+                    success = boost::filesystem::create_directory(data_path);
+                    boost::filesystem::path log_path(log_dest.str());
+                    success = boost::filesystem::create_directory(log_path);
+                } catch (...) {
+                    // NOTE: No errno here.
+                    _error.parse(success, "Couldn't create backup subdirectories");
                     _error.get(result);
                     return false;
                 }
 
                 // We have to set BOTH destination directories to the
                 // newly created directories.
-                dest_dirs[0] = data_dest.c_str();
-                dest_dirs[1] = log_dest.c_str();
+                dest_dirs[0] = data_dest.str().c_str();
+                dest_dirs[1] = log_dest.str().c_str();
                 dir_count = 2;
 	    }
 
