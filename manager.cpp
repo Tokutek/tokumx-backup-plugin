@@ -272,11 +272,19 @@ namespace mongo {
             b.append("strerror", strerror(eno));
         }
 
+        // This method determines whether there is a separate log dir.
+        // If there is, we want to back that up separately from the
+        // data dir.  If there isn't we just want to backup the data
+        // dir.  NOTE: If the log dir is a subdirectory (i.e. child)
+        // of the data dir, then we do NOT want to back it up
+        // separately.
         bool Manager::_multipleDirsNeeded() {
-	    // TODO: Use realpath on both strings to make sure the
-	    // sub-path check works.
+            if (cmdLine.logDir == "" || cmdLine.logDir == dbpath) {
+                return false;
+            }
+
             const int subpath = !(cmdLine.logDir.compare(0, dbpath.size(), dbpath));
-            if (subpath || cmdLine.logDir == "" || cmdLine.logDir == dbpath) {
+            if (subpath) {
                 return false;
             }
 
@@ -304,10 +312,11 @@ namespace mongo {
                 try {
                     boost::filesystem::create_directory(data_dest);
                     boost::filesystem::create_directory(log_dest);
-                } catch (...) {
-                    // NOTE: No errno here.
-                    _error.parse(success, "Couldn't create backup subdirectories");
-                    _error.get(result);
+                } catch (boost::filesystem::filesystem_error e) {
+                    DEV LOG(0) << "ERROR: Hot Backup could not create backup subdirectories:"
+                               << e.what() 
+                               << "code:" << e.native_error() 
+                               << endl;
                     return false;
                 }
 
