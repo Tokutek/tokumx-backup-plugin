@@ -279,7 +279,7 @@ namespace mongo {
             if (subpath || cmdLine.logDir == "" || cmdLine.logDir == dbpath) {
                 return false;
             }
-	  
+
             return true;
         }
 
@@ -290,7 +290,7 @@ namespace mongo {
             const char *dest_dirs[2];
             int dir_count = 1;
             source_dirs[0] = dbpath.c_str();
-            
+
 	    // If the user has set a separate log directory, we should
 	    // back that up as well.
 	    if (_multipleDirsNeeded()) {
@@ -301,10 +301,9 @@ namespace mongo {
                 // the other for the log directory.
                 data_dest = data_dest / "data";
                 log_dest = log_dest / "log";
-                bool success = false;
                 try {
-                    success = boost::filesystem::create_directory(data_dest);
-                    success = boost::filesystem::create_directory(log_dest);
+                    boost::filesystem::create_directory(data_dest);
+                    boost::filesystem::create_directory(log_dest);
                 } catch (...) {
                     // NOTE: No errno here.
                     _error.parse(success, "Couldn't create backup subdirectories");
@@ -320,8 +319,8 @@ namespace mongo {
 	    } else {
                 dest_dirs[0] = dest.c_str();
             }
-
-
+            
+            
             DEV LOG(0) << "Starting backup on " << dest << endl;
             int r = tokubackup_create_backup(source_dirs, dest_dirs, dir_count,
                                              c_poll_fun, this,
@@ -333,7 +332,7 @@ namespace mongo {
             else if (!ok && _error.empty()) {
                 LOG(0) << "backup failed but didn't report an error" << endl;
             }
-            
+
             if (!ok) {
                 _error.get(result);
             }
