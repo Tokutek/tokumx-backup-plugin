@@ -312,10 +312,9 @@ namespace mongo {
                 try {
                     boost::filesystem::create_directory(data_dest);
                     boost::filesystem::create_directory(log_dest);
-                } catch (boost::filesystem::filesystem_error e) {
+                } catch (const boost::filesystem::filesystem_error &e) {
                     DEV LOG(0) << "ERROR: Hot Backup could not create backup subdirectories:"
-                               << e.what() 
-                               << "code:" << e.native_error() 
+                               << e.what()
                                << endl;
                     return false;
                 }
