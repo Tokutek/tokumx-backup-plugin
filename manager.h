@@ -10,6 +10,8 @@
 
 #include "mongo/pch.h"
 
+#include <boost/filesystem.hpp>
+
 #include "mongo/db/client.h"
 #include "mongo/db/jsobj.h"
 #include "mongo/util/concurrency/mutex.h"
@@ -61,7 +63,14 @@ namespace mongo {
             static SimpleMutex _currentMutex;
             static Manager *_currentManager;
 
-            bool _multipleDirsNeeded();
+            struct DirStatus {
+                bool multiple_needed;
+                bool bad_config;
+                DirStatus() : multiple_needed(false), bad_config(false) {};
+            };
+
+            DirStatus _multipleDirsNeeded(const boost::filesystem::path & data_src, 
+                                          const boost::filesystem::path & log_src) const;
 
           public:
             explicit Manager(Client &c) : _c(c), _killedString(), _progress(), _error() {}

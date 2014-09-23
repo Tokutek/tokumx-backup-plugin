@@ -278,36 +278,63 @@ namespace mongo {
         // dir.  NOTE: If the log dir is a subdirectory (i.e. child)
         // of the data dir, then we do NOT want to back it up
         // separately.
-        bool Manager::_multipleDirsNeeded() {
+        Manager::DirStatus Manager::_multipleDirsNeeded(const boost::filesystem::path & data_src, 
+                                               const boost::filesystem::path & log_src) const {
+            DirStatus status;
             if (cmdLine.logDir == "" || cmdLine.logDir == dbpath) {
-                return false;
+                status.multiple_needed = false;
+                return status;
+            }
+            
+            // See if either data or log is a subdir of the other.
+            std::string log = log_src.string();
+            std::string data = data_src.string();
+
+            // Now check to see if log's full path is data's prefix.
+            if (log.compare(0, log.length(), data, 0, log.length()) == 0) {
+                status.bad_config = true;
+                return status;
             }
 
-            boost::filesystem::path log = cmdLine.logDir;
-            boost::filesystem::path data = dbpath;
-            boost::filesystem::path canon_log = canonical(log);
-            boost::filesystem::path canon_data = canonical(data);
-            const int length = strlen(canon_data.c_str());
-            const int subpath = ! strncmp(canon_data.c_str(), canon_log.c_str(), length);
-            if (subpath) {
-                return false;
+            // Check to see if data's full path is log's prefix.
+            if (data.compare(0, data.length(), log, 0, data.length()) == 0) {                
+                status.multiple_needed = false;
+                return status;
             }
 
-            return true;
+            status.multiple_needed = true;
+            status.bad_config = false;
+            return status;
         }
 
         bool Manager::start(const string &dest, string &errmsg, BSONObjBuilder &result) {
             boost::filesystem::path data_dest = dest;
             boost::filesystem::path log_dest = dest;
+
+            // We want the fully resolved path for both the data dir
+            // and the log dir (if it exists).
+            boost::filesystem::path data_src = canonical(boost::filesystem::path(dbpath));
+            boost::filesystem::path log_src = canonical(boost::filesystem::path(cmdLine.logDir));
             const char *source_dirs[2];
             const char *dest_dirs[2];
             int dir_count = 1;
-            source_dirs[0] = dbpath.c_str();
+            source_dirs[0] = data_src.c_str();
 
-	    // If the user has set a separate log directory, we should
-	    // back that up as well.
-	    if (_multipleDirsNeeded()) {
-                source_dirs[1] = cmdLine.logDir.c_str();
+            // Check to see if logDir is set and if it is in a valid
+            // position relative to dbpath.
+            const DirStatus dir_status = _multipleDirsNeeded(data_src, log_src);
+            if (dir_status.bad_config) {
+                DEV LOG(0) << "ERROR: "
+                           << "Hot Backup can't backup dbpath when it is inside of logDir." 
+                           << endl;
+                return false;
+            }
+
+	    // If the user has set a valid separate log directory, we
+	    // should back that up as well, so let's add it to the set
+	    // of dirs passed to hot backup.
+	    if (dir_status.multiple_needed) {
+                source_dirs[1] = log_src.c_str();
 
                 // Create two directories underneath the given
                 // destination directory, one for the data directory,
