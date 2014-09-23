@@ -283,7 +283,12 @@ namespace mongo {
                 return false;
             }
 
-            const int subpath = !(cmdLine.logDir.compare(0, dbpath.size(), dbpath));
+            boost::filesystem::path log = cmdLine.logDir;
+            boost::filesystem::path data = dbpath;
+            boost::filesystem::path canon_log = canonical(log);
+            boost::filesystem::path canon_data = canonical(data);
+            const int length = strlen(canon_data.c_str());
+            const int subpath = ! strncmp(canon_data.c_str(), canon_log.c_str(), length);
             if (subpath) {
                 return false;
             }
