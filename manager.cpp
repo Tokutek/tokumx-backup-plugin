@@ -272,120 +272,93 @@ namespace mongo {
             b.append("strerror", strerror(eno));
         }
 
-        // This method returns true if the dbpath directory is a child
-        // of the logDir directory.  We want to check for this case
-        // explicitly since its the only nesting we do not support.
-        bool Manager::_directoriesConfiguredBadly(const boost::filesystem::path & data_src,
-                                          const boost::filesystem::path & log_src) const {
-            if (cmdLine.logDir == "" || cmdLine.logDir == dbpath) {
-                return false;
+        std::vector<string> Manager::_getSourceDirs(const boost::filesystem::path &data_src,
+                                                    const boost::filesystem::path &log_src) {
+            std::string data = data_src.generic_string();
+            std::string log = log_src.generic_string();
+
+            std::vector<string> sources;
+            if (cmdLine.logDir.empty()) {
+                sources.push_back(data);
+                return sources;
             }
 
-            std::string log = log_src.string();
-            std::string data = data_src.string();
-
-            if (log.compare(0, log.length(), data, 0, log.length()) == 0) {
-                return true;
+            if (data_src.equivalent(log_src)) {
+                sources.push_back(data);
+                return sources;
             }
 
-            return false;
-        }
-
-        // This method determines whether there is a separate log dir.
-        // If there is, we want to back that up separately from the
-        // data dir.  If there isn't we just want to backup the data
-        // dir.  NOTE: If the log dir is a subdirectory (i.e. child)
-        // of the data dir, then we do NOT want to back it up
-        // separately.
-        bool Manager::_multipleDirsNeeded(const boost::filesystem::path & data_src, 
-                                          const boost::filesystem::path & log_src) const {
-            if (cmdLine.logDir == "" || cmdLine.logDir == dbpath) {
-                return false;
+            if (data.size() < log.size()) {
+                // Compare just the prefix of data's length, to see if log
+                // is a subdirectory.
+                if (data.compare(0, data.size(), log) == 0) {
+                    sources.push_back(data);
+                } else {
+                    sources.push_back(data);
+                    sources.push_back(log);
+                }
+            } else {
+                // Check whether data is a subdirectory of log.  This
+                // would be weird, but we should be consistent.
+                if (log.compare(0, log.size(), data) == 0) {
+                    sources.push_back(log);
+                } else {
+                    // We always pass dbpath before logDir, if we're using
+                    // two directories.
+                    sources.push_back(data);
+                    sources.push_back(log);
+                }
             }
 
-            // See if either data or log is a subdir of the other.
-            std::string log = log_src.string();
-            std::string data = data_src.string();
-
-            // Check to see if data's full path is log's prefix.
-            if (data.compare(0, data.length(), log, 0, data.length()) == 0) {                
-                return false;
-            }
-
-            return true;
-        }
-
-        std::vector<string> Manager::_getSourceDirs(const boost::filesystem::path & data_src,
-                                                    const boost::filesystem::path & log_src,
-                                                    string &errmsg) const {
-            std::vector<string> set;
-            if (_directoriesConfiguredBadly(data_src, log_src)) {
-                DEV LOG(0) << "ERROR: "
-                           << "Hot Backup can't backup dbpath when it is inside of logDir." 
-                           << endl;
-                errmsg = "Hot Backup can't backup dbpath when it is inside of logDir.";
-                return set;
-            }
-
-            // Add the dbpath directory.
-            set.push_back(data_src.string());
-
-            if (_multipleDirsNeeded(data_src, log_src)) {
-                set.push_back(log_src.string());
-            }
-
-            return set;
+            return sources;
         }
 
         bool Manager::start(const string &dest, string &errmsg, BSONObjBuilder &result) {
-            // We want the fully resolved path for both the data dir
-            // and the log dir (if it exists).
-            boost::filesystem::path data_src = canonical(boost::filesystem::path(dbpath));
-            boost::filesystem::path log_src = canonical(boost::filesystem::path(cmdLine.logDir));
-            std::vector<string> sources = _getSourceDirs(data_src, log_src, errmsg);
-            if (sources.empty()) {
-                return false;
-            }
+            // We want the fully resolved path, rid of '..' and symlinks,
+            // for both the data dir and the log dir (if it exists).
+            const boost::filesystem::path data_src = canonical(boost::filesystem::path(dbpath));
+            const boost::filesystem::path log_src = canonical(boost::filesystem::path(cmdLine.logDir));
+            const std::vector<string> sources = _getSourceDirs(data_src, log_src);
+            verify(!sources.empty());
+            verify(sources.size() <= 2);
 
-            boost::filesystem::path data_dest = dest;
-            boost::filesystem::path log_dest = dest;
-            const char *source_dirs[2];
-            const char *dest_dirs[2];
-            int dir_count = 1;
-            source_dirs[0] = sources[0].c_str();
+            std::vector<string> dests;
 
-	    // If the user has set a valid separate log directory, we
-	    // should back that up as well, so let's add it to the set
-	    // of dirs passed to hot backup.
-	    if (sources.size() == 2) {
-                source_dirs[1] = sources[1].c_str();
-
-                // Create two directories underneath the given
-                // destination directory, one for the data directory,
-                // the other for the log directory.
-                data_dest = data_dest / "data";
-                log_dest = log_dest / "log";
+            // Fill in dests vector based on sources.
+            if (sources.size() == 1) {
+                dests.push_back(dest);
+            } else {
+                // If we have two source dirs, they will be dbpath and
+                // logDir, we need to create subdirectories of dest.
+                const boost::filesystem::path data_dest = dest / "data";
+                const boost::filesystem::path log_dest = dest / "log";
                 try {
                     boost::filesystem::create_directory(data_dest);
                     boost::filesystem::create_directory(log_dest);
                 } catch (const boost::filesystem::filesystem_error &e) {
-                    DEV LOG(0) << "ERROR: Hot Backup could not create backup subdirectories:"
+                    DEV {
+                        LOG(0) << "ERROR: Hot Backup could not create backup subdirectories:"
                                << e.what()
                                << endl;
+                    }
                     errmsg = "ERROR: Hot Backup could not create backup subdirectories.";
                     return false;
                 }
 
-                // We have to set BOTH destination directories to the
-                // newly created directories.
-                dest_dirs[0] = data_dest.generic_string().c_str();
-                dest_dirs[1] = log_dest.generic_string().c_str();
-                dir_count = 2;
-	    } else {
-                dest_dirs[0] = dest.c_str();
+                dests.push_back(data_dest.generic_string());
+                dests.push_back(log_dest.generic_string());
+            }
+            const char *source_dirs[2];
+            const char *dest_dirs[2];
+            const int dir_count = sources.size();
+            for (size_t i = 0; i < dir_count; ++i) {
+                source_dirs[i] = sources[i].c_str();
+                dest_dirs[i] = dests[i].c_str();
             }
 
-            DEV LOG(0) << "Starting backup on " << dest << endl;
+            DEV {
+                LOG(0) << "Starting backup on " << dest << endl;
+            }
             int r = tokubackup_create_backup(source_dirs, dest_dirs, dir_count,
                                              c_poll_fun, this,
                                              c_error_fun, this);

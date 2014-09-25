@@ -63,15 +63,8 @@ namespace mongo {
             static SimpleMutex _currentMutex;
             static Manager *_currentManager;
 
-            bool _directoriesConfiguredBadly(const boost::filesystem::path & data_src,
-                                             const boost::filesystem::path & log_src) const;
-
-            bool _multipleDirsNeeded(const boost::filesystem::path & data_src, 
-                                     const boost::filesystem::path & log_src) const;
-
-            std::vector<string> _getSourceDirs(const boost::filesystem::path & data_src,
-                                               const boost::filesystem::path & log_src,
-                                               string &errmsg) const;
+            static std::vector<string> _getSourceDirs(const boost::filesystem::path &data_src,
+                                                      const boost::filesystem::path &log_src);
 
           public:
             explicit Manager(Client &c) : _c(c), _killedString(), _progress(), _error() {}
