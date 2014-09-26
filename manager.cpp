@@ -283,7 +283,7 @@ namespace mongo {
                 return sources;
             }
 
-            if (data_src.equivalent(log_src)) {
+            if (equivalent(data_src, log_src)) {
                 sources.push_back(data);
                 return sources;
             }
@@ -328,10 +328,11 @@ namespace mongo {
             if (sources.size() == 1) {
                 dests.push_back(dest);
             } else {
+                const boost::filesystem::path dest_path = dest;
                 // If we have two source dirs, they will be dbpath and
                 // logDir, we need to create subdirectories of dest.
-                const boost::filesystem::path data_dest = dest / "data";
-                const boost::filesystem::path log_dest = dest / "log";
+                const boost::filesystem::path data_dest = dest_path / "data";
+                const boost::filesystem::path log_dest = dest_path / "log";
                 try {
                     boost::filesystem::create_directory(data_dest);
                     boost::filesystem::create_directory(log_dest);
@@ -350,7 +351,7 @@ namespace mongo {
             }
             const char *source_dirs[2];
             const char *dest_dirs[2];
-            const int dir_count = sources.size();
+            const size_t dir_count = sources.size();
             for (size_t i = 0; i < dir_count; ++i) {
                 source_dirs[i] = sources[i].c_str();
                 dest_dirs[i] = dests[i].c_str();
